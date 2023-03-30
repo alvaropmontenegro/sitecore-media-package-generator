@@ -2,12 +2,12 @@ Import-Function -Name Setup-PackageGenerator
 
 function Create-New-Package {
 	param(
-	    [string]$packagePrefix,
+		[string]$packagePrefix,
 		[string]$counterOfPackages
 	)
 
 	$packageName = $packagePrefix + "_" + $counterOfPackages
-    
+
 	Write-Host "-> Creating $packageName"
 
 	$package = New-Package $packageName;
@@ -16,7 +16,7 @@ function Create-New-Package {
 	$package.Metadata.Publisher = $Publisher;
 	$package.Metadata.Version = $Version;
 	$package.Metadata.Readme = $Readme;
-	
+
 	return $package
 }
 
@@ -32,7 +32,7 @@ function Download-Package {
 }
 
 function Process-Packages {
-    
+
 	[environment]::NewLine
 	Write-Host "### Processing the packages. It might take some time, grab a coffee!"
 	Write-Host "*Don't forget to click on 'Download' and then 'Close' to close the pop up.*"
@@ -71,75 +71,156 @@ function Process-Packages {
 	}
 }
 
-##Parameters
-$selectedItem = Get-Item -Path "/sitecore/media library/"
-$counterOfPackages = 0
-[double]$packageSize = 0
+function Create-Packages {
+	##Parameters
+	$selectedItem = Get-Item -Path "master:\content"
+	$counterOfPackages = 0
+	[double]$packageSize = 0
 
-$parameters = @(
-	@{ Name = "selectedItem"; Title = "Item"; Tooltip = "Select the item you want to create packages"; Root = "sitecore/media library/"; Tab = "Main" },
-	@{ Name = "packageSize"; Value = "50"; Title = "Size (MB)"; Tooltip = "Enter the package size to be generated"; Tab = "Main" },
-	@{ Name = "packagePrefix"; Title = "Package Name"; Value = "Package"; Tab = "Package Metadata" },
-	@{ Name = "Author"; Value = [Sitecore.Context]::User.Profile.FullName; Tab = "Package Metadata" },
-	@{ Name = "Publisher"; Value = [Sitecore.SecurityModel.License.License]::Licensee; Tab = "Package Metadata" },
-	@{ Name = "Version"; Value = $selectedItem.Version; Tab = "Package Metadata" },
-	@{ Name = "Readme"; Title = "Readme"; Lines = 8; Tab = "Package Metadata" },
-	@{ Name = "Mode"; Title = "Installation Options"; Value = "Merge-Merge"; Options = $installOptions; OptionTooltips = $installOptionsTooltips; Tooltip = "Hover over each option to view a short description."; Hint = "How should the installer behave if the package contains items that already exist?"; Editor = "combo"; Tab = "Installation Options" }
-)
+	$parameters = @(
+		@{ Name = "selectedItem"; Title = "Item"; Tooltip = "Select the item you want to create packages"; Root = "sitecore/media library/"; Tab = "Main" },
+		@{ Name = "packageSize"; Value = "50"; Title = "Size (MB)"; Tooltip = "Enter the package size to be generated"; Tab = "Main" },
+		@{ Name = "packagePrefix"; Title = "Package Name"; Value = "Package"; Tab = "Package Metadata" },
+		@{ Name = "Author"; Value = [Sitecore.Context]::User.Profile.FullName; Tab = "Package Metadata" },
+		@{ Name = "Publisher"; Value = [Sitecore.SecurityModel.License.License]::Licensee; Tab = "Package Metadata" },
+		@{ Name = "Version"; Value = $selectedItem.Version; Tab = "Package Metadata" },
+		@{ Name = "Readme"; Title = "Readme"; Lines = 8; Tab = "Package Metadata" },
+		@{ Name = "Mode"; Title = "Installation Options"; Value = "Merge-Merge"; Options = $installOptions; OptionTooltips = $installOptionsTooltips; Tooltip = "Hover over each option to view a short description."; Hint = "How should the installer behave if the package contains items that already exist?"; Editor = "combo"; Tab = "Installation Options" }
+	)
 
-$props = @{} + $defaultProps
-$props["Title"] = "Transform Large Media Content into Small Packages"
-$props["Description"] = "This tool allows you to download large media content into small packages quickly. It turns the process faster and easier to migrate from one instance to another one."
-$props["Parameters"] = $parameters
-$props["Width"] = 630
-$props["Height"] = 750
+	$props = @{} + $defaultProps
+	$props["Title"] = "Transform Large Media Content into Small Packages"
+	$props["Description"] = "This tool allows you to download large media content into small packages quickly. It turns the process faster and easier to migrate from one instance to another one."
+	$props["Parameters"] = $parameters
+	$props["Width"] = 630
+	$props["Height"] = 750
 
-$result = Read-Variable @props
+	$result = Read-Variable @props
 
-Resolve-Error
+	Resolve-Error
 
-if ($result -ne "ok") {
-	Close-Window
-	exit
+	if ($result -ne "ok") {
+		Close-Window
+		exit
+	}
+
+	$InstallMode = [Sitecore.Install.Utils.InstallMode]::Undefined
+	$MergeMode = [Sitecore.Install.Utils.MergeMode]::Undefined
+
+	switch ($Mode) {
+		"Overwrite" {
+			$InstallMode = [Sitecore.Install.Utils.InstallMode]::Overwrite
+		}
+
+		"Merge-Merge" {
+			$InstallMode = [Sitecore.Install.Utils.InstallMode]::Merge
+			$MergeMode = [Sitecore.Install.Utils.MergeMode]::Merge
+		}
+
+		"Merge-Clear" {
+			$InstallMode = [Sitecore.Install.Utils.InstallMode]::Merge
+			$MergeMode = [Sitecore.Install.Utils.MergeMode]::Clear
+		}
+
+		"Merge-Append" {
+			$InstallMode = [Sitecore.Install.Utils.InstallMode]::Merge
+			$MergeMode = [Sitecore.Install.Utils.MergeMode]::Append
+		}
+
+		"Skip" {
+			$InstallMode = [Sitecore.Install.Utils.InstallMode]::Skip
+		}
+
+		"SideBySide" {
+			$InstallMode = [Sitecore.Install.Utils.InstallMode]::SideBySide
+		}
+
+		"AskUser" {
+			$InstallMode = [Sitecore.Install.Utils.InstallMode]::Undefined
+		}
+	}
+
+	Process-Packages
+
+	[environment]::NewLine
+	Write-Host "Packages created successfully!"
 }
 
-$InstallMode = [Sitecore.Install.Utils.InstallMode]::Undefined
-$MergeMode = [Sitecore.Install.Utils.MergeMode]::Undefined
+function Install-Packages {
 
-switch ($Mode) {
-	"Overwrite" {
-		$InstallMode = [Sitecore.Install.Utils.InstallMode]::Overwrite
+	$parameters = @(
+		@{ Name = "packageName"; Title = "Package Name"; Value = "Package"; Tooltip = "Enter the package name to be installed."; },
+		@{ Name = "folderPath"; Title = "Folder"; Value = "C:\inetpub\wwwroot\"; Tooltip = "Type the folder where the packages are placed in the file system"; }
+	)
+
+	$props = @{} + $defaultProps
+	$props["Title"] = "Install Multiple Packages"
+	$props["Description"] = "After you've generated the small packages, it's time to install them all at once."
+	$props["Parameters"] = $parameters
+	$props["Width"] = 630
+	$props["Height"] = 750
+
+	$result = Read-Variable @props
+
+	if ($result -ne "ok") {
+		Close-Window
+		exit
 	}
 
-	"Merge-Merge" {
-		$InstallMode = [Sitecore.Install.Utils.InstallMode]::Merge
-		$MergeMode = [Sitecore.Install.Utils.MergeMode]::Merge
+	Write-Host "Installing packages from file system!"
+	[environment]::NewLine
+
+	$packageCounter = 0;
+
+	while ($true) {
+
+		$fullPath = "$folderPath\$($packageName)_$($packageCounter).zip"
+		$pathFound = Test-Path -Path $fullPath
+
+		if (!$pathFound) {
+			break;
+		}
+
+		Install-Package -Path $fullPath
+		
+		Write-Host "$($packageName)_$($packageCounter) installed."
+		
+		$packageCounter++
 	}
 
-	"Merge-Clear" {
-		$InstallMode = [Sitecore.Install.Utils.InstallMode]::Merge
-		$MergeMode = [Sitecore.Install.Utils.MergeMode]::Clear
+	[environment]::NewLine
+	Write-Host "Packages installed successfully!"
+}
+
+function Choose-Operation {
+
+	$radioOptions = [ordered]@{
+		"Create Packages" = 1
+		"Install Packages" = 2
 	}
 
-	"Merge-Append" {
-		$InstallMode = [Sitecore.Install.Utils.InstallMode]::Merge
-		$MergeMode = [Sitecore.Install.Utils.MergeMode]::Append
+	$parameters = @( @{ Name = "radioSelector"; Title = "Operation"; Editor = "radio"; Value = 1; Options = $radioOptions; Tooltip = "Would you like to create or install packages?"; })
+
+	$props = @{} + $defaultProps
+	$props["Title"] = "Transform Large Media Content into Small Packages"
+	$props["Description"] = "This tool allows you to download large media content into small packages quickly. It turns the process faster and easier to migrate from one instance to another one."
+	$props["Parameters"] = $parameters
+	$props["Width"] = 630
+	$props["Height"] = 750
+
+	$result = Read-Variable @props
+
+	if ($result -ne "ok") {
+		Close-Window
+		exit
 	}
 
-	"Skip" {
-		$InstallMode = [Sitecore.Install.Utils.InstallMode]::Skip
+	if ($radioSelector -eq 1) {
+		Create-Packages
 	}
-
-	"SideBySide" {
-		$InstallMode = [Sitecore.Install.Utils.InstallMode]::SideBySide
-	}
-
-	"AskUser" {
-		$InstallMode = [Sitecore.Install.Utils.InstallMode]::Undefined
+	else {
+		Install-Packages
 	}
 }
 
-Process-Packages
-
-[environment]::NewLine
-Write-Host "Packages created successfully!"
+Choose-Operation
